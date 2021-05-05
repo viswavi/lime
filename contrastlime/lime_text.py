@@ -13,6 +13,8 @@ from sklearn.utils import check_random_state
 
 from . import explanation
 from . import lime_base
+from .exceptions import LimeError
+
 
 
 class TextDomainMapper(explanation.DomainMapper):
@@ -313,7 +315,8 @@ class LimeTextExplainer(object):
                  bow=True,
                  mask_string=None,
                  random_state=None,
-                 char_level=False):
+                 char_level=False,
+                 mode='classification'):
         """Init function.
 
         Args:
@@ -346,6 +349,7 @@ class LimeTextExplainer(object):
                 initialized using the internal numpy seed.
             char_level: an boolean identifying that we treat each character
                 as an independent occurence in the string
+            contrast_mode: "classification" or "regression"
         """
 
         if kernel is None:
@@ -364,7 +368,7 @@ class LimeTextExplainer(object):
         self.mask_string = mask_string
         self.split_expression = split_expression
         self.char_level = char_level
-
+        self.contrast_mode = mode
     def explain_instance(self,
                          text_instance,
                          classifier_fn,
@@ -415,6 +419,7 @@ class LimeTextExplainer(object):
             distance_metric=distance_metric)
         if self.class_names is None:
             self.class_names = [str(x) for x in range(yss[0].shape[0])]
+
         ret_exp = explanation.Explanation(domain_mapper=domain_mapper,
                                           class_names=self.class_names,
                                           random_state=self.random_state)
@@ -433,7 +438,7 @@ class LimeTextExplainer(object):
                 feature_selection=self.feature_selection)
         return ret_exp
 
-    def explain_instance_compare(self,
+    def explain_instance_contrast(self,
                          text_instance,
                          classifier_fn_a,
                          classifier_fn_b,
@@ -464,6 +469,7 @@ class LimeTextExplainer(object):
                 this parameter.
             num_features: maximum number of features present in explanation
             num_samples: size of the neighborhood to learn the linear model
+            label_style: 'classification' or 'regression'
             distance_metric: the distance metric to use for sample weighting,
                 defaults to cosine similarity
             model_regressor: sklearn regressor to use in explanation. Defaults
@@ -484,24 +490,57 @@ class LimeTextExplainer(object):
         data, yss, distances = self.__data_labels_distances_contrast(
             indexed_string, classifier_fn_a, classifier_fn_b, num_samples,
             distance_metric=distance_metric, label_style=label_style)
-        if self.class_names is None:
-            self.class_names = [str(x) for x in range(yss[0].shape[0])]
+
+
+        if label_style == "classification":
+            if self.class_names is None:
+                self.class_names = [str(x) for x in range(yss[0].shape[0])]
+        elif label_style == "regression":
+            try:
+                if len(yss.shape) != 1 and len(yss[0].shape) == 1:
+                    yss = np.array([v[0] for v in yss])
+                assert isinstance(yss, np.ndarray) and len(yss.shape) == 1
+            except AssertionError:
+                raise ValueError("Your model needs to output single-dimensional \
+                    numpyarrays, not arrays of {} dimensions".format(yss.shape))
+
+            predicted_value = yss[0]
+            min_y = min(yss)
+            max_y = max(yss)
+
+            # add a dimension to be compatible with downstream machinery
+            yss = yss[:, np.newaxis]
+        else:
+            raise LimeError('Invalid explanation mode "{}". '
+                            'Should be either "classification" '
+                            'or "regression".'.format(label_style))
+
         ret_exp = explanation.Explanation(domain_mapper=domain_mapper,
-                                          class_names=self.class_names,
-                                          random_state=self.random_state)
-        ret_exp.predict_proba = yss[0]
-        if top_labels:
-            labels = np.argsort(yss[0])[-top_labels:]
-            ret_exp.top_labels = list(labels)
-            ret_exp.top_labels.reverse()
+                                        class_names=self.class_names,
+                                        random_state=self.random_state,
+                                        mode=self.contrast_mode)
+
+        if label_style == "classification":
+            ret_exp.predict_proba = yss[0]
+            if top_labels:
+                labels = np.argsort(yss[0])[-top_labels:]
+                ret_exp.top_labels = list(labels)
+                ret_exp.top_labels.reverse()
+        else:
+            ret_exp.predicted_value = predicted_value
+            ret_exp.min_value = min_y
+            ret_exp.max_value = max_y
+            labels = [0]
         for label in labels:
             (ret_exp.intercept[label],
-             ret_exp.local_exp[label],
-             ret_exp.score[label],
-             ret_exp.local_pred[label]) = self.base.explain_instance_with_data(
+            ret_exp.local_exp[label],
+            ret_exp.score[label],
+            ret_exp.local_pred[label]) = self.base.explain_instance_with_data(
                 data, yss, distances, label, num_features,
                 model_regressor=model_regressor,
                 feature_selection=self.feature_selection)
+            ret_exp.dummy_label=0
+
         return ret_exp
 
     def __data_labels_distances(self,
@@ -623,7 +662,8 @@ class LimeTextExplainer(object):
         elif label_style == "regression":
             labels = prediction_difference
         else:
-            raise ValueError("Compare-lime must be done via either classification or regression.")
-
+            raise LimeError('Invalid explanation mode "{}". '
+                            'Should be either "classification" '
+                            'or "regression".'.format(label_style))
         distances = distance_fn(sp.sparse.csr_matrix(data))
         return data, labels, distances
