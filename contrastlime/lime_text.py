@@ -447,8 +447,10 @@ class LimeTextExplainer(object):
                          num_features=10,
                          num_samples=5000,
                          label_style="classification",
+                         model_names=["Model A", "Model B"],
                          distance_metric='cosine',
-                         model_regressor=None):
+                         model_regressor=None,
+                         label_to_examine=0):
         """Generates explanations for a prediction.
 
         First, we generate neighborhood data by randomly hiding features from
@@ -489,7 +491,8 @@ class LimeTextExplainer(object):
         domain_mapper = TextDomainMapper(indexed_string)
         data, yss, distances = self.__data_labels_distances_contrast(
             indexed_string, classifier_fn_a, classifier_fn_b, num_samples,
-            distance_metric=distance_metric, label_style=label_style)
+            distance_metric=distance_metric, label_style=label_style,
+            label_to_examine=label_to_examine)
 
 
         if label_style == "classification":
@@ -541,6 +544,7 @@ class LimeTextExplainer(object):
                 feature_selection=self.feature_selection)
             ret_exp.dummy_label=0
 
+        ret_exp.class_names = model_names
         return ret_exp
 
     def __data_labels_distances(self,
@@ -599,7 +603,7 @@ class LimeTextExplainer(object):
                                 classifier_fn_a,
                                 classifier_fn_b,
                                 num_samples,
-                                baseline_label=1,
+                                label_to_examine=1,
                                 distance_metric='cosine',
                                 label_style="classification"):
         """Generates a neighborhood around a prediction.
@@ -615,7 +619,7 @@ class LimeTextExplainer(object):
             indexed_string: document (IndexedString) to be explained,
             classifier_fn_b: Another classifier prediction probability function.
             num_samples: size of the neighborhood to learn the linear model
-            baseline_label: label value whose predicted probability we compare
+            label_to_examine: label value whose predicted probability we compare
                             between models.
             distance_metric: the distance metric to use for sample weighting,
                 defaults to cosine similarity.
@@ -650,7 +654,7 @@ class LimeTextExplainer(object):
         pred_probs_a = classifier_fn_a(inverse_data)
         pred_probs_b = classifier_fn_b(inverse_data)
         assert pred_probs_a.shape == pred_probs_b.shape
-        prediction_difference = (pred_probs_b - pred_probs_a)[:, baseline_label]
+        prediction_difference = (pred_probs_b - pred_probs_a)[:, label_to_examine]
         # Make the "predicted probability" matrix have two columns: the difference between model A and model B for 
         # a desired label, and the difference between model B and model A for the desired label.
 
