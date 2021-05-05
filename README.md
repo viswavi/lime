@@ -15,13 +15,7 @@ Lime is able to explain any black box classifier, with two or more classes. All 
 
 ## Installation
 
-The lime package is on [PyPI](https://pypi.python.org/pypi/lime). Simply run:
-
-```sh
-pip install lime
-```
-
-Or clone the repository and run:
+The lime package is on [PyPI](https://pypi.python.org/pypi/lime). Simply clone the repository and run:
 
 ```sh
 pip install .
