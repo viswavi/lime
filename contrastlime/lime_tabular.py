@@ -15,11 +15,11 @@ from sklearn.utils import check_random_state
 from pyDOE2 import lhs
 from scipy.stats.distributions import norm
 
-from lime.discretize import QuartileDiscretizer
-from lime.discretize import DecileDiscretizer
-from lime.discretize import EntropyDiscretizer
-from lime.discretize import BaseDiscretizer
-from lime.discretize import StatsDiscretizer
+from contrastlime.discretize import QuartileDiscretizer
+from contrastlime.discretize import DecileDiscretizer
+from contrastlime.discretize import EntropyDiscretizer
+from contrastlime.discretize import BaseDiscretizer
+from contrastlime.discretize import StatsDiscretizer
 from . import explanation
 from . import lime_base
 
