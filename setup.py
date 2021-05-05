@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-setup(name='comparelime',
+setup(name='contrastlime',
       version='0.2.0.1',
       description='Local Interpretable Model-Agnostic Explanations for machine learning classifiers',
       url='http://github.com/viswavi/lime',
