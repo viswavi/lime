@@ -84,7 +84,7 @@ class Explanation(object):
 
         Args:
             domain_mapper: must inherit from DomainMapper class
-            type: "classification" or "regression"
+            mode: "classification" or "regression"
             class_names: list of class names (only used for classification)
             random_state: an integer or numpy.RandomState that will be used to
                 generate random numbers. If None, the random state will be

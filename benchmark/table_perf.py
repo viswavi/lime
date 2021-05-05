@@ -6,7 +6,7 @@ implementations and methods for distance calculation.
 import time
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.datasets import make_classification
-from lime.lime_tabular import LimeTabularExplainer
+from comparelime.lime_tabular import LimeTabularExplainer
 
 
 def interpret_data(X, y, func):

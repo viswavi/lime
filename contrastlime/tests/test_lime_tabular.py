@@ -10,7 +10,7 @@ from numpy.testing import assert_array_equal
 from sklearn.datasets import load_iris, make_classification, make_multilabel_classification
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LinearRegression
-from lime.discretize import QuartileDiscretizer, DecileDiscretizer, EntropyDiscretizer
+from comparelime.discretize import QuartileDiscretizer, DecileDiscretizer, EntropyDiscretizer
 
 
 try:
@@ -19,7 +19,7 @@ except ImportError:
     # Deprecated in scikit-learn version 0.18, removed in 0.20
     from sklearn.cross_validation import train_test_split
 
-from lime.lime_tabular import LimeTabularExplainer
+from comparelime.lime_tabular import LimeTabularExplainer
 
 
 class TestLimeTabular(unittest.TestCase):

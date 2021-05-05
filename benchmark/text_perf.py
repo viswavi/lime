@@ -4,7 +4,7 @@ import sklearn.ensemble
 import sklearn.metrics
 from sklearn.datasets import fetch_20newsgroups
 from sklearn.pipeline import make_pipeline
-from lime.lime_text import LimeTextExplainer
+from comparelime.lime_text import LimeTextExplainer
 
 
 def interpret_data(X, y, func, class_names):
