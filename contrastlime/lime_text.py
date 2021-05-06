@@ -446,7 +446,6 @@ class LimeTextExplainer(object):
                          top_labels=None,
                          num_features=10,
                          num_samples=25000,
-                         label_style="classification",
                          model_names=["Model A", "Model B"],
                          distance_metric='cosine',
                          model_regressor=None,
@@ -471,7 +470,6 @@ class LimeTextExplainer(object):
                 this parameter.
             num_features: maximum number of features present in explanation
             num_samples: size of the neighborhood to learn the linear model
-            label_style: 'classification' or 'regression'
             distance_metric: the distance metric to use for sample weighting,
                 defaults to cosine similarity
             model_regressor: sklearn regressor to use in explanation. Defaults
@@ -491,14 +489,14 @@ class LimeTextExplainer(object):
         domain_mapper = TextDomainMapper(indexed_string)
         data, yss, distances = self.__data_labels_distances_contrast(
             indexed_string, classifier_fn_a, classifier_fn_b, num_samples,
-            distance_metric=distance_metric, label_style=label_style,
+            distance_metric=distance_metric, label_style=self.contrast_mode,
             label_to_examine=label_to_examine)
 
 
-        if label_style == "classification":
+        if self.contrast_mode == "classification":
             if self.class_names is None:
                 self.class_names = [str(x) for x in range(yss[0].shape[0])]
-        elif label_style == "regression":
+        elif self.contrast_mode == "regression":
             try:
                 if len(yss.shape) != 1 and len(yss[0].shape) == 1:
                     yss = np.array([v[0] for v in yss])
@@ -523,7 +521,7 @@ class LimeTextExplainer(object):
                                         random_state=self.random_state,
                                         mode=self.contrast_mode)
 
-        if label_style == "classification":
+        if self.contrast_mode == "classification":
             ret_exp.predict_proba = yss[0]
             if top_labels:
                 labels = np.argsort(yss[0])[-top_labels:]
