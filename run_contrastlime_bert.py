@@ -34,7 +34,6 @@ from tqdm import tqdm
 from torch.nn import Softmax
 from transformers import AutoTokenizer
 from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
-
 import sklearn.metrics
 
 
@@ -71,9 +70,10 @@ class BertModel(LightningModule):
         bio = torch.LongTensor(bio).to(device=self.device_)
         labels = torch.LongTensor(labels).to(device=self.device_)
         logits_a, _ = self.model((bio, atten, labels))
-        pred = torch.argmax(logits_a, dim=1).tolist()
+
         #preds_a.extend(pred_a)
-        prob = self.softmax(logits_a)[0,labels].tolist()
+        prob = (self.softmax(logits_a))[[i for i in range(len(bio))],labels].tolist()
+        pred = torch.argmax(logits_a, dim=1).tolist()
         #probs_a.extend(prob_a)
         return pred, prob
 
@@ -209,91 +209,104 @@ print("Model B accuracy (scrubbed model) ", sklearn.metrics.accuracy_score(label
 
 
 # In[82]:
-
-
-disagrees = np.where((np.asarray(probs_a) <=.3) & (np.asarray(probs_b) >=.75))[0]
-example_idx = disagrees[42]
-
 from importlib import reload
 reload(contrastlime.lime_text)
 reload(contrastlime)
-LimeTextExplainer = contrastlime.lime_text.LimeTextExplainer
-class_lbls = sorted(np.unique(labels_all))
-class_names = [label2occ[j] for j in class_lbls]
+
+disagrees = np.where((np.asarray(probs_a) <=.3) & (np.asarray(probs_b) >=.75))[0]
+example_idxs = [42, 1200, 534, 89, 75, 532, 156, 214, 743, 656]
+for example in example_idxs:
+    example_idx = disagrees[example]
+
+
+    LimeTextExplainer = contrastlime.lime_text.LimeTextExplainer
+    class_lbls = sorted(np.unique(labels_all))
+    class_names = [label2occ[j] for j in class_lbls]
 
 
 
-# In[35]:
+    # In[35]:
 
 
-# Single-model interpretation of classifier A (forest of 500 trees)
-class_explainer = LimeTextExplainer(class_names=class_names, mode='classification')
-class_exp = class_explainer.explain_instance(bios[example_idx],
-                                         model_a.predict_proba, labels = (preds_a[example_idx], ),
-                                         num_features=10)
-print('Document id: %d' % example_idx)
-print('Classifier A: probability =', model_a.predict_proba([bios[example_idx]])[0,labels_all[example_idx]])
-print('True class: %s' % labels_all[example_idx])
+    # Single-model interpretation of classifier A (forest of 500 trees)
+    class_explainer = LimeTextExplainer(class_names=class_names, mode='classification')
+    class_exp = class_explainer.explain_instance(bios[example_idx],
+                                             model_a.predict_proba, labels = (labels_all[example_idx], ),
+                                             num_features=10)
+    print('Document id: %d' % example_idx)
 
-class_exp.show_in_notebook()
+    print('Classifier A: probability =', model_a.predict_proba([bios[example_idx]])[0,labels_all[example_idx]])
+    print('True class: %s' % labels_all[example_idx])
 
-
-# In[36]:
-
-
-# Single-model interpretation of classifier B (forest of 2 trees)
-class_explainer = LimeTextExplainer(class_names=class_names, mode='classification')
-class_exp = class_explainer.explain_instance(bios[example_idx],
-                                         model_b.predict_proba,
-                                         num_features=10)
-print('Document id: %d' % example_idx)
-print('Classifier B: ', model_b.predict_proba([bios[example_idx]])[0,labels_all[example_idx]])
-print('True class: %s' % labels_all[example_idx])
-
-class_exp.as_list()
-class_exp.show_in_notebook()
+    fig = class_exp.show_in_notebook()
+    fig.savefig('lime_analysis/class_exp/example_{}_a.png'.format(example_idx))
 
 
-# In[39]:
+    # In[36]:
 
 
-# Comparison interpretation, in classification mode
-# Examining why Classifier A chose label 0 (wrong), relative to Classifier B.
-class_explainer = LimeTextExplainer(class_names=class_names, mode='classification')
-class_exp = class_explainer.explain_instance_contrast(bios[example_idx],
-                                         model_a.predict_proba,
-                                         model_b.predict_proba,
-                                         label_style="classification",
-                                         num_features=10,
-                                         label_to_examine=1,
-                                         model_names=["Unscrubbed Bert", "Scrubbed Bert"])
-print('Document id: %d' % example_idx)
-print('Classifier A:', model_a.predict_proba([bios[example_idx]])[labels_all[example_idx]])
-print('Classifier B:', model_b.predict_proba([bios[example_idx]])[labels_all[example_idx]])
-print('True class: %s' % labels_all[example_idx])
-
-class_exp.show_in_notebook()
+    # Single-model interpretation of classifier B (forest of 2 trees)
+    class_explainer = LimeTextExplainer(class_names=class_names, mode='classification')
+    class_exp = class_explainer.explain_instance(bios[example_idx],
+                                             model_b.predict_proba,labels = (labels_all[example_idx], ),
+                                             num_features=10)
 
 
-# In[40]:
+    print('Document id: %d' % example_idx)
+    print('Classifier B: ', model_b.predict_proba([bios[example_idx]])[0,labels_all[example_idx]])
+    print('True class: %s' % labels_all[example_idx])
+
+    class_exp.as_list()
+    fig = class_exp.show_in_notebook()
+    fig.savefig('lime_analysis/class_exp/example_{}_b.png'.format(example_idx))
 
 
-# Comparison interpretation, in classification mode
-# Examining why Classifier A chose label 0 (wrong), relative to Classifier B.
-reg_explainer = LimeTextExplainer(mode='regression')
-reg_exp = reg_explainer.explain_instance_contrast(bios[example_idx],
-                                         model_a.predict_proba,
-                                         model_b.predict_proba,
-                                         label_style="regression",
-                                         num_features=10,
-                                         label_to_examine=1,
-                                         model_names=["Classifier A", "Classifier B"])
-print('Document id: %d' % example_idx)
-print('Classifier A:', model_a.predict_proba([bios[example_idx]])[labels_all[example_idx]])
-print('Classifier B:', model_b.predict_proba([bios[example_idx]])[labels_all[example_idx]])
-print('True class: %s' % labels_all[example_idx])
 
-reg_exp.show_in_notebook()
+    # In[39]:
+
+
+    # Comparison interpretation, in classification mode
+    # Examining why Classifier A chose label 0 (wrong), relative to Classifier B.
+    class_explainer = LimeTextExplainer(class_names=class_names, mode='classification')
+    class_exp = class_explainer.explain_instance_contrast(bios[example_idx],
+                                             model_a.predict_proba,
+                                             model_b.predict_proba,
+                                             label_style="classification",
+                                             num_features=10,
+                                             label_to_examine=labels_all[example_idx],
+                                             model_names=["Unscrubbed Bert", "Scrubbed Bert"])
+    print('Document id: %d' % example_idx)
+    print('Classifier A:', model_a.predict_proba([bios[example_idx]])[labels_all[example_idx]])
+    print('Classifier B:', model_b.predict_proba([bios[example_idx]])[labels_all[example_idx]])
+    print('True class: %s' % labels_all[example_idx])
+    fig = class_exp.show_in_notebook()
+
+    fig.savefig('lime_analysis/class_exp_contrast/example_{}.png'.format(example_idx))
+
+
+
+
+    # In[40]:
+
+
+    # Comparison interpretation, in classification mode
+    # Examining why Classifier A chose label 0 (wrong), relative to Classifier B.
+    reg_explainer = LimeTextExplainer(mode='regression')
+    reg_exp = reg_explainer.explain_instance_contrast(bios[example_idx],
+                                             model_a.predict_proba,
+                                             model_b.predict_proba,
+                                             label_style="regression",
+                                             num_features=10,
+                                             label_to_examine=1,
+                                             model_names=["Classifier A", "Classifier B"])
+    print('Document id: %d' % example_idx)
+    print('Classifier A:', model_a.predict_proba([bios[example_idx]])[labels_all[example_idx]])
+    print('Classifier B:', model_b.predict_proba([bios[example_idx]])[labels_all[example_idx]])
+    print('True class: %s' % labels_all[example_idx])
+
+    fig = reg_exp.show_in_notebook()
+    fig.savefig('lime_analysis/reg_exp_contrast/example_{}.png'.format(example_idx))
+
 
 
 # In[ ]:
