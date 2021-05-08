@@ -449,7 +449,8 @@ class LimeTextExplainer(object):
                          model_names=["Model A", "Model B"],
                          distance_metric='cosine',
                          model_regressor=None,
-                         label_to_examine=0):
+                         label_to_examine=0,
+                         regressor_requires_positive_values=False):
         """Generates explanations for a prediction.
 
         First, we generate neighborhood data by randomly hiding features from
@@ -490,7 +491,8 @@ class LimeTextExplainer(object):
         data, yss, distances = self.__data_labels_distances_contrast(
             indexed_string, classifier_fn_a, classifier_fn_b, num_samples,
             distance_metric=distance_metric, label_style=self.contrast_mode,
-            label_to_examine=label_to_examine)
+            label_to_examine=label_to_examine,
+            make_labels_positive=regressor_requires_positive_values)
 
 
         if self.contrast_mode == "classification":
@@ -542,9 +544,11 @@ class LimeTextExplainer(object):
                 feature_selection=self.feature_selection)
             ret_exp.dummy_label=0
 
-            # TODO(Vijay): Delete if not using Tweedie
-            ret_exp.score[label] -= 1
-            ret_exp.intercept[label] -= 1
+            if regressor_requires_positive_values:
+                # Outputs have been adjusted to add 1, so now subtract 1 from
+                # the score and y-intercept.
+                ret_exp.score[label] -= 1
+                ret_exp.intercept[label] -= 1
 
         ret_exp.class_names = model_names
         return ret_exp
@@ -607,7 +611,8 @@ class LimeTextExplainer(object):
                                 num_samples,
                                 label_to_examine=1,
                                 distance_metric='cosine',
-                                label_style="classification"):
+                                label_style="classification",
+                                make_labels_positive=False):
         """Generates a neighborhood around a prediction.
 
         Generates neighborhood data by randomly removing words from
@@ -625,6 +630,10 @@ class LimeTextExplainer(object):
                             between models.
             distance_metric: the distance metric to use for sample weighting,
                 defaults to cosine similarity.
+            label_style: "classification" or "regression"
+            make_labels_positive: whether to scale up the difference between models'
+                                  predicted probabilities to always be positive (by
+                                  adding 1.0 to them).
 
 
         Returns:
@@ -663,8 +672,11 @@ class LimeTextExplainer(object):
         if label_style == "classification":
             contrast_matrix = np.zeros(pred_probs_a.shape)
             # Add 1.0 to make this a nonnegative output
-            contrast_matrix[:,1] = 1.0 + prediction_difference
-            contrast_matrix[:,0] = 1.0 - prediction_difference
+            contrast_matrix[:,1] = prediction_difference
+            contrast_matrix[:,0] = -prediction_difference
+            if make_labels_positive:
+                contrast_matrix[:,1] += 1.0
+                contrast_matrix[:,0] += 1.0
             labels = contrast_matrix
         elif label_style == "regression":
             labels = 1.0 + prediction_difference
