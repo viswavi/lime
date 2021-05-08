@@ -541,7 +541,8 @@ class LimeTextExplainer(object):
             ret_exp.local_pred[label]) = self.base.explain_instance_with_data(
                 data, yss, distances, label, num_features,
                 model_regressor=model_regressor,
-                feature_selection=self.feature_selection)
+                feature_selection=self.feature_selection,
+                regressor_requires_positive_values=regressor_requires_positive_values)
             ret_exp.dummy_label=0
 
             if regressor_requires_positive_values:
