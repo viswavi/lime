@@ -189,8 +189,11 @@ class LimeBase(object):
             model_regressor = Ridge(alpha=1, fit_intercept=True,
                                     random_state=self.random_state)
         easy_model = model_regressor
-        easy_model.fit(neighborhood_data[:, used_features],
-                       labels_column, sample_weight=weights)
+        if 0 in labels_column:
+            print("Warn: replacing 0s with small positive values for Tweedie regression")
+            labels_column = np.where(labels_column == 0, 1e1-5, labels_column)
+
+        easy_model.fit(neighborhood_data[:, used_features], labels_column, sample_weight=weights)
         prediction_score = easy_model.score(
             neighborhood_data[:, used_features],
             labels_column, sample_weight=weights)

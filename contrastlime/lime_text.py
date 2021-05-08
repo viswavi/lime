@@ -542,6 +542,10 @@ class LimeTextExplainer(object):
                 feature_selection=self.feature_selection)
             ret_exp.dummy_label=0
 
+            # TODO(Vijay): Delete if not using Tweedie
+            ret_exp.score[label] -= 1
+            ret_exp.intercept[label] -= 1
+
         ret_exp.class_names = model_names
         return ret_exp
 
@@ -658,11 +662,12 @@ class LimeTextExplainer(object):
 
         if label_style == "classification":
             contrast_matrix = np.zeros(pred_probs_a.shape)
-            contrast_matrix[:,1] = prediction_difference
-            contrast_matrix[:,0] = -prediction_difference
+            # Add 1.0 to make this a nonnegative output
+            contrast_matrix[:,1] = 1.0 + prediction_difference
+            contrast_matrix[:,0] = 1.0 - prediction_difference
             labels = contrast_matrix
         elif label_style == "regression":
-            labels = prediction_difference
+            labels = 1.0 + prediction_difference
         else:
             raise LimeError('Invalid explanation mode "{}". '
                             'Should be either "classification" '
