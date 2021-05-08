@@ -238,7 +238,7 @@ for example in example_idxs:
     print('Classifier A: probability =', model_a.predict_proba([bios[example_idx]])[0,labels_all[example_idx]])
     print('True class: %s' % labels_all[example_idx])
 
-    fig = class_exp.show_in_notebook()
+    fig = class_exp.as_pyplot_figure()
     fig.savefig('lime_analysis/class_exp/example_{}_a.png'.format(example_idx))
 
 
@@ -257,7 +257,7 @@ for example in example_idxs:
     print('True class: %s' % labels_all[example_idx])
 
     class_exp.as_list()
-    fig = class_exp.show_in_notebook()
+    fig = class_exp.as_pyplot_figure()
     fig.savefig('lime_analysis/class_exp/example_{}_b.png'.format(example_idx))
 
 
@@ -279,7 +279,7 @@ for example in example_idxs:
     print('Classifier A:', model_a.predict_proba([bios[example_idx]])[labels_all[example_idx]])
     print('Classifier B:', model_b.predict_proba([bios[example_idx]])[labels_all[example_idx]])
     print('True class: %s' % labels_all[example_idx])
-    fig = class_exp.show_in_notebook()
+    fig = class_exp.as_pyplot_figure()
 
     fig.savefig('lime_analysis/class_exp_contrast/example_{}.png'.format(example_idx))
 
@@ -304,7 +304,7 @@ for example in example_idxs:
     print('Classifier B:', model_b.predict_proba([bios[example_idx]])[labels_all[example_idx]])
     print('True class: %s' % labels_all[example_idx])
 
-    fig = reg_exp.show_in_notebook()
+    fig = reg_exp.as_pyplot_figure()
     fig.savefig('lime_analysis/reg_exp_contrast/example_{}.png'.format(example_idx))
 
 
