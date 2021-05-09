@@ -676,7 +676,7 @@ class LimeTextExplainer(object):
         assert pred_probs_a.shape == pred_probs_b.shape
         #prediction_difference = np.abs((pred_probs_b - pred_probs_a)[:, label_to_examine]) - 0.5
         #prediction_difference = np.abs((pred_probs_b - pred_probs_a)[:, label_to_examine]) - 0.5
-        prediction_difference = self.squash(np.abs((pred_probs_b - pred_probs_a)[:, label_to_examine])) - 0.5
+        prediction_difference = self.squash(np.abs((pred_probs_b - pred_probs_a)[:, label_to_examine]))
         #
 
         # Make the "predicted probability" matrix have two columns: the difference between model A and model B for 
