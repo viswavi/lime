@@ -445,7 +445,7 @@ class LimeTextExplainer(object):
                          labels=(1,),
                          top_labels=None,
                          num_features=10,
-                         num_samples=25000,
+                         num_samples=5000,
                          model_names=["Model A", "Model B"],
                          distance_metric='cosine',
                          model_regressor=None,
