@@ -445,11 +445,12 @@ class LimeTextExplainer(object):
                          labels=(1,),
                          top_labels=None,
                          num_features=10,
-                         num_samples=25000,
+                         num_samples=5000,
                          model_names=["Model A", "Model B"],
                          distance_metric='cosine',
                          model_regressor=None,
-                         label_to_examine=0):
+                         label_to_examine=0,
+                         regressor_requires_positive_values=False):
         """Generates explanations for a prediction.
 
         First, we generate neighborhood data by randomly hiding features from
@@ -490,7 +491,8 @@ class LimeTextExplainer(object):
         data, yss, distances = self.__data_labels_distances_contrast(
             indexed_string, classifier_fn_a, classifier_fn_b, num_samples,
             distance_metric=distance_metric, label_style=self.contrast_mode,
-            label_to_examine=label_to_examine)
+            label_to_examine=label_to_examine,
+            make_labels_positive=regressor_requires_positive_values)
 
 
         if self.contrast_mode == "classification":
@@ -539,10 +541,17 @@ class LimeTextExplainer(object):
             ret_exp.local_pred[label]) = self.base.explain_instance_with_data(
                 data, yss, distances, label, num_features,
                 model_regressor=model_regressor,
-                feature_selection=self.feature_selection)
+                feature_selection=self.feature_selection,
+                regressor_requires_positive_values=regressor_requires_positive_values)
             ret_exp.dummy_label=0
 
         #ret_exp.class_names = model_names
+            if regressor_requires_positive_values:
+                # Outputs have been adjusted to add 1, so now subtract 1 from
+                # the score and y-intercept.
+                ret_exp.score[label] -= 0.5
+                ret_exp.intercept[label] -= 0.5
+
         return ret_exp
 
     def __data_labels_distances(self,
@@ -595,6 +604,14 @@ class LimeTextExplainer(object):
         distances = distance_fn(sp.sparse.csr_matrix(data))
         return data, labels, distances
 
+    @staticmethod
+    def squash(value, tanh_squash_factor=2, squash_threshold=0.4):
+        # Given value between 0 and 1, push values between 0 and squash_threshold closer to 0, and push
+        # values between squash_threshold and 1 closer to 1.
+        zero_one_value = (value - squash_threshold) * 2
+        squashed_value = np.tanh(tanh_squash_factor * zero_one_value)
+        return squashed_value/2 + 0.5
+
     def __data_labels_distances_contrast(self,
                                 indexed_string,
                                 classifier_fn_a,
@@ -602,7 +619,8 @@ class LimeTextExplainer(object):
                                 num_samples,
                                 label_to_examine=1,
                                 distance_metric='cosine',
-                                label_style="classification"):
+                                label_style="classification",
+                                make_labels_positive=False):
         """Generates a neighborhood around a prediction.
 
         Generates neighborhood data by randomly removing words from
@@ -620,6 +638,10 @@ class LimeTextExplainer(object):
                             between models.
             distance_metric: the distance metric to use for sample weighting,
                 defaults to cosine similarity.
+            label_style: "classification" or "regression"
+            make_labels_positive: whether to scale up the difference between models'
+                                  predicted probabilities to always be positive (by
+                                  adding 1.0 to them).
 
 
         Returns:
@@ -651,14 +673,18 @@ class LimeTextExplainer(object):
         pred_probs_a = classifier_fn_a(inverse_data)
         pred_probs_b = classifier_fn_b(inverse_data)
         assert pred_probs_a.shape == pred_probs_b.shape
-        prediction_difference = (pred_probs_b - pred_probs_a)[:, label_to_examine]
+        prediction_difference = self.squash(np.abs((pred_probs_b - pred_probs_a)[:, label_to_examine]))
+
         # Make the "predicted probability" matrix have two columns: the difference between model A and model B for 
         # a desired label, and the difference between model B and model A for the desired label.
-
         if label_style == "classification":
             contrast_matrix = np.zeros(pred_probs_a.shape)
+            # Add 1.0 to make this a nonnegative output
             contrast_matrix[:,1] = prediction_difference
             contrast_matrix[:,0] = -prediction_difference
+            if make_labels_positive:
+                contrast_matrix[:,1] += 0.5
+                contrast_matrix[:,0] += 0.5
             labels = contrast_matrix
         elif label_style == "regression":
             labels = prediction_difference
