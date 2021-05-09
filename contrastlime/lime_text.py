@@ -606,12 +606,12 @@ class LimeTextExplainer(object):
         return data, labels, distances
 
     @staticmethod
-    def squash(self, value, tanh_squash_factor=5):
+    def squash(value, tanh_squash_factor=2, squash_decision_boundary=0.4):
         # Given value between 0 and 1, push values between 0 and 0.5 closer to 0, and push
         # values between 0.5 and 1 closer to 1.
-        zero_one_value = value * 2 - 1
+        zero_one_value = (value - squash_decision_boundary) * 2
         squash = np.tanh(tanh_squash_factor * zero_one_value)
-        return (squash + 1) / 2
+        return squash/2 + squash_decision_boundary
 
     def __data_labels_distances_contrast(self,
                                 indexed_string,
