@@ -688,7 +688,7 @@ class LimeTextExplainer(object):
                 contrast_matrix[:,0] += 0.5
             labels = contrast_matrix
         elif label_style == "regression":
-            labels = 0.5 + prediction_difference
+            labels = prediction_difference
         else:
             raise LimeError('Invalid explanation mode "{}". '
                             'Should be either "classification" '
