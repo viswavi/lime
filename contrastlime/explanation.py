@@ -165,7 +165,7 @@ class Explanation(object):
         """
         import matplotlib.pyplot as plt
         exp = self.as_list(label=label, **kwargs)
-        fig = plt.figure()
+        fig = plt.figure(figsize=(20,20))
         vals = [x[1] for x in exp]
         names = [x[0] for x in exp]
         vals.reverse()
@@ -178,6 +178,7 @@ class Explanation(object):
             title = 'Local explanation for class %s' % self.class_names[label]
         else:
             title = 'Local explanation'
+            
         plt.title(title)
         return fig
 

@@ -16,6 +16,7 @@ if module_path not in sys.path:
 
 
 import contrastlime
+import matplotlib.pyplot as plt
 from pytorch_lightning.core.lightning import LightningModule
 
 import contrastlime.lime_text
@@ -126,7 +127,6 @@ bios = list(test_data['bio'])
 # bios_indices = tokenizer(bios)['input_ids']
 # attention_masks = [torch.LongTensor([1]*len(ind)).reshape(1,-1) for ind in bios_indices]
 
-
 # In[68]:
 DEVICE = 'cpu'
 if torch.cuda.is_available():
@@ -141,7 +141,7 @@ print("Loading models...")
 #
 # model_a.eval()
 # model_b.eval()
-
+np.random.seed(42)
 model_a = BertModel(checkpoint_file=CHKPT_UNSCRUBBED, tokenizer=dm.tokenizer, device=DEVICE)
 model_b = BertModel(checkpoint_file=CHKPT_SCRUBBED, tokenizer=dm.tokenizer, device=DEVICE)
 
@@ -212,10 +212,112 @@ print("Model B accuracy (scrubbed model) ", sklearn.metrics.accuracy_score(label
 from importlib import reload
 reload(contrastlime.lime_text)
 reload(contrastlime)
+class_lbls = sorted(np.unique(labels_all))
+class_names = [label2occ[j] for j in class_lbls]
 
 disagrees = np.where((np.asarray(probs_a) <=.3) & (np.asarray(probs_b) >=.75))[0]
-example_idxs = [42, 1200, 534, 89, 75, 532, 156, 214, 743, 656]
+disagrees2 = np.where((np.asarray(probs_a) >=.75) & (np.asarray(probs_b) <=.3))[0]
+
+additional1 = np.random.randint(0, len(disagrees), size=(1, 40))
+additional2 = np.random.randint(0, len(disagrees2), size=(1, 40))
+
+
+additional1 = set(additional1[0].tolist())
+additional2 = set(additional2[0].tolist())
+
+example_idxs = additional1 | set([42, 1200, 534, 89, 75, 84, 954, 342, 623, 777])
+example_idxs2 = additional2 | set([4, 32, 987, 1000, 444, 324, 534, 212, 647, 999])
+print ("--------------------")
+print("looking through examples where B likely is wrong and A is likely correct")
+print ("--------------------")
+for example in example_idxs2:
+    print ("--------------------")
+    print ("--------------------")
+
+    print(example)
+    example_idx = disagrees2[example]
+
+
+    LimeTextExplainer = contrastlime.lime_text.LimeTextExplainer
+    class_lbls = sorted(np.unique(labels_all))
+    class_names = [label2occ[j] for j in class_lbls]
+
+    # # Single-model interpretation of classifier A
+    class_explainer = LimeTextExplainer(class_names=class_names, mode='classification')
+    class_exp = class_explainer.explain_instance(bios[example_idx],
+                                                 model_a.predict_proba, labels = (labels_all[example_idx], ),
+                                                 num_features=10)
+    print ("--------------------")
+    print ("Single Limes")
+    print('Document id: %d' % example_idx)
+
+    print('Classifier A (unscrubbed): probability =', model_a.predict_proba([bios[example_idx]])[0,labels_all[example_idx]])
+    print('True class: %s' % label2occ[labels_all[example_idx]])
+    print('Classifier A predicted class: %s' % label2occ[preds_a[example_idx]])
+
+    fig = class_exp.as_pyplot_figure(label=labels_all[example_idx])
+    title = "Single LIME, Biased Model, Predicted {}, True {}".format(label2occ[preds_a[example_idx]], label2occ[labels_all[example_idx]])
+    plt.title(title)
+    fig.savefig('lime_analysis/class_exp/example_{}_a_higher_a_{}.png'.format(example_idx, label2occ[labels_all[example_idx]]))
+
+
+
+
+    # Single-model interpretation of classifier B
+    class_explainer = LimeTextExplainer(class_names=class_names, mode='classification')
+    class_exp = class_explainer.explain_instance(bios[example_idx],
+                                                 model_b.predict_proba,labels = (labels_all[example_idx], ),
+                                                 num_features=10)
+
+
+    print('Document id: %d' % example_idx)
+    print('Classifier B (scrubbed): ', model_b.predict_proba([bios[example_idx]])[0,labels_all[example_idx]])
+    print('Classifier B predicted class: %s' % label2occ[preds_b[example_idx]])
+
+    print('True class: %s' % labels_all[example_idx])
+
+    class_exp.as_list(label=labels_all[example_idx])
+    fig = class_exp.as_pyplot_figure(label=labels_all[example_idx])
+    title = "Single LIME, Un-Biased Model, Predicted {}, True {}".format(label2occ[preds_b[example_idx]], label2occ[labels_all[example_idx]])
+    plt.title(title)
+    fig.savefig('lime_analysis/class_exp/example_{}_b_higher_a_{}.png'.format(example_idx, label2occ[labels_all[example_idx]]))
+    print ("--------------------")
+
+
+
+    print ("--------------------")
+    print ("Contrastive Limes")
+    reg_explainer = LimeTextExplainer(mode='regression')
+    reg_exp = reg_explainer.explain_instance_contrast(bios[example_idx],
+                                                      model_a.predict_proba,
+                                                      model_b.predict_proba, num_samples=5000,
+                                                      label_style="regression",labels = (labels_all[example_idx], ),
+                                                      num_features=10,
+                                                      label_to_examine=labels_all[example_idx],
+                                                      model_names=["Classifier A", "Classifier B"])
+    print('Document id: %d' % example_idx)
+    print('Classifier A (unscrubbed):', model_a.predict_proba([bios[example_idx]])[0, labels_all[example_idx]])
+    print('Classifier B (scrubbed):', model_b.predict_proba([bios[example_idx]])[0, labels_all[example_idx]])
+    print('True class: %s' % label2occ[labels_all[example_idx]])
+
+    fig = reg_exp.as_pyplot_figure(label=labels_all[example_idx])
+    title = "Contrast LIME, Model A (Bias) Predicted {}, \n Model B (Unbias) Predicted {}, True {}".format(label2occ[preds_a[example_idx]],\
+                                                                                                           label2occ[preds_b[example_idx]], \
+                                                                                                           label2occ[labels_all[example_idx]])
+    plt.title(title)
+    fig.savefig('lime_analysis/reg_exp_contrast/example_{}_higher_a_{}.png'.format(example_idx, label2occ[labels_all[example_idx]]))
+    print ("--------------------")
+
+
+
+print ("--------------------")
+print("looking through examples where A likely is wrong and B is likely correct")
+print ("--------------------")
 for example in example_idxs:
+    print ("--------------------")
+    print ("--------------------")
+
+    print(example)
     example_idx = disagrees[example]
 
 
@@ -223,94 +325,69 @@ for example in example_idxs:
     class_lbls = sorted(np.unique(labels_all))
     class_names = [label2occ[j] for j in class_lbls]
 
-
-
-    # In[35]:
-
-
-    # Single-model interpretation of classifier A (forest of 500 trees)
+    # # Single-model interpretation of classifier A
     class_explainer = LimeTextExplainer(class_names=class_names, mode='classification')
     class_exp = class_explainer.explain_instance(bios[example_idx],
-                                             model_a.predict_proba, labels = (labels_all[example_idx], ),
-                                             num_features=10)
+                                                 model_a.predict_proba, labels = (labels_all[example_idx], ),
+                                                 num_features=10)
+    print ("--------------------")
+    print ("Single Limes")
     print('Document id: %d' % example_idx)
 
-    print('Classifier A: probability =', model_a.predict_proba([bios[example_idx]])[0,labels_all[example_idx]])
-    print('True class: %s' % labels_all[example_idx])
+    print('Classifier A (unscrubbed): probability =', model_a.predict_proba([bios[example_idx]])[0,labels_all[example_idx]])
+    print('True class: %s' % label2occ[labels_all[example_idx]])
+    print('Classifier A predicted class: %s' % label2occ[preds_a[example_idx]])
 
-    fig = class_exp.as_pyplot_figure()
-    fig.savefig('lime_analysis/class_exp/example_{}_a.png'.format(example_idx))
+    fig = class_exp.as_pyplot_figure(label=labels_all[example_idx])
+    title = "Single LIME, Biased Model, Predicted {}, True {}".format(label2occ[preds_a[example_idx]], label2occ[labels_all[example_idx]])
+    plt.title(title)
+    fig.savefig('lime_analysis/class_exp/example_{}_a_higher_b_{}.png'.format(example_idx, label2occ[labels_all[example_idx]]))
 
 
-    # In[36]:
 
 
-    # Single-model interpretation of classifier B (forest of 2 trees)
+    # Single-model interpretation of classifier B
     class_explainer = LimeTextExplainer(class_names=class_names, mode='classification')
     class_exp = class_explainer.explain_instance(bios[example_idx],
-                                             model_b.predict_proba,labels = (labels_all[example_idx], ),
-                                             num_features=10)
+                                                 model_b.predict_proba,labels = (labels_all[example_idx], ),
+                                                 num_features=10)
 
 
     print('Document id: %d' % example_idx)
-    print('Classifier B: ', model_b.predict_proba([bios[example_idx]])[0,labels_all[example_idx]])
+    print('Classifier B (scrubbed): ', model_b.predict_proba([bios[example_idx]])[0,labels_all[example_idx]])
+    print('Classifier B predicted class: %s' % label2occ[preds_b[example_idx]])
+
     print('True class: %s' % labels_all[example_idx])
 
-    class_exp.as_list()
-    fig = class_exp.as_pyplot_figure()
-    fig.savefig('lime_analysis/class_exp/example_{}_b.png'.format(example_idx))
+    class_exp.as_list(label=labels_all[example_idx])
+    fig = class_exp.as_pyplot_figure(label=labels_all[example_idx])
+    title = "Single LIME, Un-Biased Model, Predicted {}, True {}".format(label2occ[preds_b[example_idx]], label2occ[labels_all[example_idx]])
+    plt.title(title)
+    fig.savefig('lime_analysis/class_exp/example_{}_b_higher_b_{}.png'.format(example_idx, label2occ[labels_all[example_idx]]))
+    print ("--------------------")
 
 
 
-    # In[39]:
-
-
-    # Comparison interpretation, in classification mode
-    # Examining why Classifier A chose label 0 (wrong), relative to Classifier B.
-    class_explainer = LimeTextExplainer(class_names=class_names, mode='classification')
-    class_exp = class_explainer.explain_instance_contrast(bios[example_idx],
-                                             model_a.predict_proba,
-                                             model_b.predict_proba,
-                                             label_style="classification",
-                                             num_features=10,
-                                             label_to_examine=labels_all[example_idx],
-                                             model_names=["Unscrubbed Bert", "Scrubbed Bert"])
-    print('Document id: %d' % example_idx)
-    print('Classifier A:', model_a.predict_proba([bios[example_idx]])[labels_all[example_idx]])
-    print('Classifier B:', model_b.predict_proba([bios[example_idx]])[labels_all[example_idx]])
-    print('True class: %s' % labels_all[example_idx])
-    fig = class_exp.as_pyplot_figure()
-
-    fig.savefig('lime_analysis/class_exp_contrast/example_{}.png'.format(example_idx))
-
-
-
-
-    # In[40]:
-
-
-    # Comparison interpretation, in classification mode
-    # Examining why Classifier A chose label 0 (wrong), relative to Classifier B.
+    print ("--------------------")
+    print ("Contrastive Limes")
     reg_explainer = LimeTextExplainer(mode='regression')
     reg_exp = reg_explainer.explain_instance_contrast(bios[example_idx],
-                                             model_a.predict_proba,
-                                             model_b.predict_proba,
-                                             label_style="regression",
-                                             num_features=10,
-                                             label_to_examine=1,
-                                             model_names=["Classifier A", "Classifier B"])
+                                                      model_a.predict_proba,
+                                                      model_b.predict_proba, num_samples=5000,
+                                                      label_style="regression",labels = (labels_all[example_idx], ),
+                                                      num_features=10,
+                                                      label_to_examine=labels_all[example_idx],
+                                                      model_names=["Classifier A", "Classifier B"])
     print('Document id: %d' % example_idx)
-    print('Classifier A:', model_a.predict_proba([bios[example_idx]])[labels_all[example_idx]])
-    print('Classifier B:', model_b.predict_proba([bios[example_idx]])[labels_all[example_idx]])
-    print('True class: %s' % labels_all[example_idx])
+    print('Classifier A (unscrubbed):', model_a.predict_proba([bios[example_idx]])[0, labels_all[example_idx]])
+    print('Classifier B (scrubbed):', model_b.predict_proba([bios[example_idx]])[0, labels_all[example_idx]])
+    print('True class: %s' % label2occ[labels_all[example_idx]])
 
-    fig = reg_exp.as_pyplot_figure()
-    fig.savefig('lime_analysis/reg_exp_contrast/example_{}.png'.format(example_idx))
-
-
-
-# In[ ]:
-
-
-
+    fig = reg_exp.as_pyplot_figure(label=labels_all[example_idx])
+    title = "Contrast LIME, Model A (Bias) Predicted {}, \n Model B (Unbias) Predicted {}, True {}".format(label2occ[preds_a[example_idx]], \
+                                                                                                           label2occ[preds_b[example_idx]], \
+                                                                                                           label2occ[labels_all[example_idx]])
+    plt.title(title)
+    fig.savefig('lime_analysis/reg_exp_contrast/example_{}_higher_b_{}.png'.format(example_idx, label2occ[labels_all[example_idx]]))
+    print ("--------------------")
 
