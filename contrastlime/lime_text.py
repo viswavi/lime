@@ -605,6 +605,14 @@ class LimeTextExplainer(object):
         distances = distance_fn(sp.sparse.csr_matrix(data))
         return data, labels, distances
 
+    @staticmethod
+    def squash(self, value, tanh_squash_factor=5):
+        # Given value between 0 and 1, push values between 0 and 0.5 closer to 0, and push
+        # values between 0.5 and 1 closer to 1.
+        zero_one_value = value * 2 - 1
+        squash = np.tanh(tanh_squash_factor * zero_one_value)
+        return (squash + 1) / 2
+
     def __data_labels_distances_contrast(self,
                                 indexed_string,
                                 classifier_fn_a,
@@ -666,7 +674,11 @@ class LimeTextExplainer(object):
         pred_probs_a = classifier_fn_a(inverse_data)
         pred_probs_b = classifier_fn_b(inverse_data)
         assert pred_probs_a.shape == pred_probs_b.shape
-        prediction_difference = np.abs((pred_probs_b - pred_probs_a)[:, label_to_examine]) - 0.5
+        #prediction_difference = np.abs((pred_probs_b - pred_probs_a)[:, label_to_examine]) - 0.5
+        #prediction_difference = np.abs((pred_probs_b - pred_probs_a)[:, label_to_examine]) - 0.5
+        prediction_difference = self.squash(np.abs((pred_probs_b - pred_probs_a)[:, label_to_examine])) - 0.5
+        #
+
         # Make the "predicted probability" matrix have two columns: the difference between model A and model B for 
         # a desired label, and the difference between model B and model A for the desired label.
 
