@@ -545,13 +545,13 @@ class LimeTextExplainer(object):
                 regressor_requires_positive_values=regressor_requires_positive_values)
             ret_exp.dummy_label=0
 
+        #ret_exp.class_names = model_names
             if regressor_requires_positive_values:
                 # Outputs have been adjusted to add 1, so now subtract 1 from
                 # the score and y-intercept.
                 ret_exp.score[label] -= 0.5
                 ret_exp.intercept[label] -= 0.5
 
-        ret_exp.class_names = model_names
         return ret_exp
 
     def __data_labels_distances(self,
@@ -589,7 +589,6 @@ class LimeTextExplainer(object):
         def distance_fn(x):
             return sklearn.metrics.pairwise.pairwise_distances(
                 x, x[0], metric=distance_metric).ravel() * 100
-
         doc_size = indexed_string.num_words()
         sample = self.random_state.randint(1, doc_size + 1, num_samples - 1)
         data = np.ones((num_samples, doc_size))
