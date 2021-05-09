@@ -548,8 +548,8 @@ class LimeTextExplainer(object):
             if regressor_requires_positive_values:
                 # Outputs have been adjusted to add 1, so now subtract 1 from
                 # the score and y-intercept.
-                ret_exp.score[label] -= 1
-                ret_exp.intercept[label] -= 1
+                ret_exp.score[label] -= 0.5
+                ret_exp.intercept[label] -= 0.5
 
         ret_exp.class_names = model_names
         return ret_exp
@@ -666,7 +666,7 @@ class LimeTextExplainer(object):
         pred_probs_a = classifier_fn_a(inverse_data)
         pred_probs_b = classifier_fn_b(inverse_data)
         assert pred_probs_a.shape == pred_probs_b.shape
-        prediction_difference = (pred_probs_b - pred_probs_a)[:, label_to_examine]
+        prediction_difference = np.abs((pred_probs_b - pred_probs_a)[:, label_to_examine]) - 0.5
         # Make the "predicted probability" matrix have two columns: the difference between model A and model B for 
         # a desired label, and the difference between model B and model A for the desired label.
 
@@ -676,11 +676,11 @@ class LimeTextExplainer(object):
             contrast_matrix[:,1] = prediction_difference
             contrast_matrix[:,0] = -prediction_difference
             if make_labels_positive:
-                contrast_matrix[:,1] += 1.0
-                contrast_matrix[:,0] += 1.0
+                contrast_matrix[:,1] += 0.5
+                contrast_matrix[:,0] += 0.5
             labels = contrast_matrix
         elif label_style == "regression":
-            labels = 1.0 + prediction_difference
+            labels = 0.5 + prediction_difference
         else:
             raise LimeError('Invalid explanation mode "{}". '
                             'Should be either "classification" '
