@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(name='contrastlime',
-      version='0.2.0.6',
+      version='0.2.0.7',
       description='Contrastive Local Interpretable Model-Agnostic Explanations for comparing machine learning classifiers',
       url='http://github.com/viswavi/lime',
       license='BSD',

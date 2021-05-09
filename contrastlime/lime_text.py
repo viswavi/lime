@@ -606,12 +606,12 @@ class LimeTextExplainer(object):
         return data, labels, distances
 
     @staticmethod
-    def squash(value, tanh_squash_factor=2, squash_decision_boundary=0.4):
+    def squash(value, tanh_squash_factor=2, squash_decision_boundary=0.25):
         # Given value between 0 and 1, push values between 0 and 0.5 closer to 0, and push
         # values between 0.5 and 1 closer to 1.
         zero_one_value = (value - squash_decision_boundary) * 2
-        squash = np.tanh(tanh_squash_factor * zero_one_value)
-        return squash/2 + squash_decision_boundary
+        squashed_value = np.tanh(tanh_squash_factor * zero_one_value)
+        return squashed_value/2 + 0.5
 
     def __data_labels_distances_contrast(self,
                                 indexed_string,
@@ -674,14 +674,10 @@ class LimeTextExplainer(object):
         pred_probs_a = classifier_fn_a(inverse_data)
         pred_probs_b = classifier_fn_b(inverse_data)
         assert pred_probs_a.shape == pred_probs_b.shape
-        #prediction_difference = np.abs((pred_probs_b - pred_probs_a)[:, label_to_examine]) - 0.5
-        #prediction_difference = np.abs((pred_probs_b - pred_probs_a)[:, label_to_examine]) - 0.5
         prediction_difference = self.squash(np.abs((pred_probs_b - pred_probs_a)[:, label_to_examine]))
-        #
 
         # Make the "predicted probability" matrix have two columns: the difference between model A and model B for 
         # a desired label, and the difference between model B and model A for the desired label.
-
         if label_style == "classification":
             contrast_matrix = np.zeros(pred_probs_a.shape)
             # Add 1.0 to make this a nonnegative output
