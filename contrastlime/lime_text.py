@@ -618,19 +618,9 @@ class LimeTextExplainer(object):
     '''
 
     @staticmethod
-    def squash(value, logit_clipping_range=6, squash_scaling_factor=3):
-        # Given value between -1 and 1, push values further from 0 much further from 0.
-        # Adjust difference between values (normally between -1 and 1) to be betwen 0 and 1.
-        positive_value = (value * squash_scaling_factor + 1)/2
-        # Clip value to be between 0 and 1.
-        positive_value = np.minimum(np.maximum(positive_value, 1e-1), 1 - 1e-1)
-        logit = np.log(positive_value / (1 - positive_value))
-        if logit_clipping_range:
-            clipped_logit = np.minimum(np.maximum(logit, -logit_clipping_range), logit_clipping_range)
-        else:
-            # No clipping
-            clipped_logit = logit
-        return clipped_logit
+    def squash(value, logit_clipping_range=6, squash_scaling_factor=2):
+        squashed_value = np.tanh(squash_scaling_factor * value)
+        return squashed_value/2 + 0.5
 
     def __data_labels_distances_contrast(self,
                                 indexed_string,
