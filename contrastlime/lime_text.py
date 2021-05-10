@@ -604,12 +604,24 @@ class LimeTextExplainer(object):
         distances = distance_fn(sp.sparse.csr_matrix(data))
         return data, labels, distances
 
+    '''
     @staticmethod
-    def squash(value, logit_clipping_range=5):
-        # Given value between 0 and 1, push values between 0 and squash_threshold closer to 0, and push
-        # values between squash_threshold and 1 closer to 1.
+    def squash(value, scale_factor=0.46):
+        value = value * scale_factor
+        # Given value between -1 and 1, push values further from 0 much further from 0.
         # Adjust difference between values (normally between -1 and 1) to be betwen 0 and 1.
         positive_value = (value + 1)/2
+        # Clip value to be between 0 and 1.
+        positive_value = np.minimum(np.maximum(positive_value, 1e-6), 1 - 1e-6)
+        logit = np.log(positive_value / (1 - positive_value))
+        return logit
+    '''
+
+    @staticmethod
+    def squash(value, logit_clipping_range=6, squash_scaling_factor=3):
+        # Given value between -1 and 1, push values further from 0 much further from 0.
+        # Adjust difference between values (normally between -1 and 1) to be betwen 0 and 1.
+        positive_value = (value * squash_scaling_factor + 1)/2
         # Clip value to be between 0 and 1.
         positive_value = np.minimum(np.maximum(positive_value, 1e-1), 1 - 1e-1)
         logit = np.log(positive_value / (1 - positive_value))
