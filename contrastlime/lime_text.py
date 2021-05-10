@@ -549,8 +549,8 @@ class LimeTextExplainer(object):
             if regressor_requires_positive_values:
                 # Outputs have been adjusted to add 1, so now subtract 1 from
                 # the score and y-intercept.
-                ret_exp.score[label] -= 0.5
-                ret_exp.intercept[label] -= 0.5
+                ret_exp.score[label] -= 1.0
+                ret_exp.intercept[label] -= 1.0
 
         return ret_exp
 
@@ -605,12 +605,20 @@ class LimeTextExplainer(object):
         return data, labels, distances
 
     @staticmethod
-    def squash(value, tanh_squash_factor=2, squash_threshold=0.4):
+    def squash(value, logit_clipping_range=5):
         # Given value between 0 and 1, push values between 0 and squash_threshold closer to 0, and push
         # values between squash_threshold and 1 closer to 1.
-        zero_one_value = (value - squash_threshold) * 2
-        squashed_value = np.tanh(tanh_squash_factor * zero_one_value)
-        return squashed_value/2 + 0.5
+        # Adjust difference between values (normally between -1 and 1) to be betwen 0 and 1.
+        positive_value = (value + 1)/2
+        # Clip value to be between 0 and 1.
+        positive_value = np.minimum(np.maximum(positive_value, 1e-1), 1 - 1e-1)
+        logit = np.log(positive_value / (1 - positive_value))
+        if logit_clipping_range:
+            clipped_logit = np.minimum(np.maximum(logit, -logit_clipping_range), logit_clipping_range)
+        else:
+            # No clipping
+            clipped_logit = logit
+        return clipped_logit
 
     def __data_labels_distances_contrast(self,
                                 indexed_string,
@@ -673,18 +681,18 @@ class LimeTextExplainer(object):
         pred_probs_a = classifier_fn_a(inverse_data)
         pred_probs_b = classifier_fn_b(inverse_data)
         assert pred_probs_a.shape == pred_probs_b.shape
-        prediction_difference = self.squash(np.abs((pred_probs_b - pred_probs_a)[:, label_to_examine]))
+        prediction_difference = self.squash((pred_probs_b - pred_probs_a)[:, label_to_examine])
 
         # Make the "predicted probability" matrix have two columns: the difference between model A and model B for 
         # a desired label, and the difference between model B and model A for the desired label.
         if label_style == "classification":
             contrast_matrix = np.zeros(pred_probs_a.shape)
-            # Add 1.0 to make this a nonnegative output
-            contrast_matrix[:,1] = prediction_difference
-            contrast_matrix[:,0] = -prediction_difference
+            contrast_matrix[:,1] = prediction_difference/2
+            contrast_matrix[:,0] = -prediction_difference/2
             if make_labels_positive:
-                contrast_matrix[:,1] += 0.5
-                contrast_matrix[:,0] += 0.5
+                # Add 1.0 to make this a nonnegative output
+                contrast_matrix[:,1] += 1.0
+                contrast_matrix[:,0] += 1.0
             labels = contrast_matrix
         elif label_style == "regression":
             labels = prediction_difference
