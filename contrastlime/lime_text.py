@@ -618,7 +618,7 @@ class LimeTextExplainer(object):
     '''
 
     @staticmethod
-    def squash(value, logit_clipping_range=6, squash_scaling_factor=1):
+    def squash(value, squash_scaling_factor=1):
         squashed_value = np.tanh(squash_scaling_factor * value)
         return squashed_value/2 + 0.5
 
