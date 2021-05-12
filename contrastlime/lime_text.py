@@ -316,7 +316,8 @@ class LimeTextExplainer(object):
                  mask_string=None,
                  random_state=None,
                  char_level=False,
-                 mode='classification'):
+                 mode='classification',
+                 method='ContrastLIME'):
         """Init function.
 
         Args:
@@ -350,7 +351,10 @@ class LimeTextExplainer(object):
             char_level: an boolean identifying that we treat each character
                 as an independent occurence in the string
             contrast_mode: "classification" or "regression"
+            method: one of ["ContrastLIME" or "DiffLIME"]
         """
+        assert method in ["ContrastLIME", "DiffLIME"]
+        self.method = method
 
         if kernel is None:
             def kernel(d, kernel_width):
@@ -683,14 +687,18 @@ class LimeTextExplainer(object):
         pred_probs_a = classifier_fn_a(inverse_data)
         pred_probs_b = classifier_fn_b(inverse_data)
         assert pred_probs_a.shape == pred_probs_b.shape
-        prediction_difference = self.squash((pred_probs_b - pred_probs_a)[:, label_to_examine])
+
+        if self.method == "ContrastLIME":
+            prediction_difference = self.squash((pred_probs_b - pred_probs_a)[:, label_to_examine]) / 2
+        elif self.method == "DiffLIME":
+            prediction_difference = (pred_probs_b - pred_probs_a)[:, label_to_examine]
 
         # Make the "predicted probability" matrix have two columns: the difference between model A and model B for 
         # a desired label, and the difference between model B and model A for the desired label.
         if label_style == "classification":
             contrast_matrix = np.zeros(pred_probs_a.shape)
-            contrast_matrix[:,1] = prediction_difference/2
-            contrast_matrix[:,0] = -prediction_difference/2
+            contrast_matrix[:,1] = prediction_difference
+            contrast_matrix[:,0] = -prediction_difference
             if make_labels_positive:
                 # Add 1.0 to make this a nonnegative output
                 contrast_matrix[:,1] += 1.0
