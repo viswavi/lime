@@ -33,6 +33,7 @@ import torch
 import math
 from tqdm import tqdm 
 from torch.nn import Softmax
+import argparse
 from transformers import AutoTokenizer
 from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 import sklearn.metrics
@@ -79,15 +80,30 @@ class BertModel(LightningModule):
         return pred, prob
 
 
+parser = argparse.ArgumentParser()
+parser.add_argument('--scrubbed', action='store_true', help='load scrubbed model and its control for comparison')
 
-
-
+args = parser.parse_args()
 
 
 
 DATA_PATH = '../biasinbios/data_bios/'
 CHKPT_SCRUBBED = '../biasinbios/chkpts_scrubbed/epoch=4-step=4663.ckpt'
+CHKPT_SCRUBBED_CONTROL = '../biasinbios/chkpts_scrubbed_4201/epoch=4-step=4663.ckpt'
 CHKPT_UNSCRUBBED = '../biasinbios/chkpts_unscrubbed/epoch=4-step=4663.ckpt'
+CHKPT_UNSCRUBBED_CONTROL = '../biasinbios/chkpts_unscrubbed_4201/epoch=4-step=4663.ckpt'
+if args.scrubbed:
+    print("settuping up control experiment for scrubbed model")
+    MODELA = CHKPT_SCRUBBED
+    MODELB = CHKPT_SCRUBBED_CONTROL
+    scrub_arg = 'scrubbed'
+else:
+    print("settuping up control experiment for unscrubbed model")
+    MODELA = CHKPT_UNSCRUBBED
+    MODELB = CHKPT_UNSCRUBBED_CONTROL
+    scrub_arg = 'unscrubbed'
+
+
 BERT = 'bert-base-uncased'
 NUM_WORKERS = 4
 BATCH_SIZE = 16
@@ -134,23 +150,20 @@ if torch.cuda.is_available():
     DEVICE='cuda'
 
 print("Loading models...")
-# model_a = BertBio.load_from_checkpoint(CHKPT_UNSCRUBBED)
-# model_b = BertBio.load_from_checkpoint(CHKPT_SCRUBBED)
-# model_a = model_a.to(device=DEVICE)
-# model_b = model_b.to(device=DEVICE)
-#
-# model_a.eval()
-# model_b.eval()
+
 np.random.seed(42)
-model_a = BertModel(checkpoint_file=CHKPT_UNSCRUBBED, tokenizer=dm.tokenizer, device=DEVICE)
-model_b = BertModel(checkpoint_file=CHKPT_SCRUBBED, tokenizer=dm.tokenizer, device=DEVICE)
+model_a = BertModel(checkpoint_file=MODELA, tokenizer=dm.tokenizer, device=DEVICE)
+model_b = BertModel(checkpoint_file=MODELB, tokenizer=dm.tokenizer, device=DEVICE)
 
 # In[76]:
-
+if not os.path.exists('lime_control_{}'.format(scrub_arg)):
+    os.mkdir('lime_control_{}'.format(scrub_arg))
+    os.mkdir('lime_control_{}'.format(scrub_arg) + '/class_exp')
+    os.mkdir('lime_control_{}'.format(scrub_arg) + '/reg_exp_contrast')
 
 
 #for atten, bio, label in tqdm(zip(attention_masks, bios_indices, labels), total=len(labels)):
-if not os.path.exists("predictions.pkl"):
+if not os.path.exists('predictions_for_control_{}.pkl'.format(scrub_arg)):
     preds_a = []
     preds_b = []
     probs_a = []
@@ -165,47 +178,39 @@ if not os.path.exists("predictions.pkl"):
         labels_all.extend(labels.tolist())
         pred_a, prob_a = model_a.do_forward(batch)
         pred_b, prob_b = model_b.do_forward(batch)
-        # atten = atten.to(device=DEVICE)
-        # bio = torch.LongTensor(bio).to(device=DEVICE)
-        # labels = torch.LongTensor(labels).to(device=DEVICE)
-        # logits_a, _ = model_a((bio, atten, labels))
-        # pred_a = torch.argmax(logits_a, dim=1).tolist()
+
         preds_a.extend(pred_a)
-        # prob_a = softmax(logits_a)[0,labels].tolist()
         probs_a.extend(prob_a)
 
-
-        # logits_b, _ = model_a((bio, atten, labels))
-        #pred_b = torch.argmax(logits_b, dim=1)
         preds_b.extend(pred_b)
-        #prob_b = softmax(logits_b)[0,labels].tolist()
+
         probs_b.extend(prob_b)
         if len(pred_a) != len(pred_b):
             print(len(pred_a), len(pred_b))
-    with open('predictions.pkl', 'wb') as f:
-        pkl.dump({'pred_scrubbed': preds_b, 'pred_unscrubbed': preds_a, \
-                'prob_scrubbed': probs_b, 'prob_unscrubbed': probs_a, 'labels_all': labels_all}, f)
+    with open('predictions_for_control_{}.pkl'.format(scrub_arg), 'wb') as f:
+        pkl.dump({'pred_{}_control'.format(scrub_arg): preds_b, 'pred_{}'.format(scrub_arg): preds_a, \
+                'prob_{}_control'.format(scrub_arg): probs_b, 'prob_{}'.format(scrub_arg): probs_a, 'labels_all': labels_all}, f)
 
 else:
-    with open('predictions.pkl', 'rb') as f:
+    with open('predictions_for_control_{}.pkl'.format(scrub_arg), 'rb') as f:
         data_dict = pkl.load(f)
-    preds_a = data_dict['pred_unscrubbed']
-    preds_b = data_dict['pred_scrubbed']
+    preds_a = data_dict['pred_{}'.format(scrub_arg)]
+    preds_b = data_dict['pred_{}_control'.format(scrub_arg)]
 
-    probs_a = data_dict['prob_unscrubbed']
-    probs_b = data_dict['prob_scrubbed']
+    probs_a = data_dict['prob_{}'.format(scrub_arg)]
+    probs_b = data_dict['prob_{}_control'.format(scrub_arg)]
     labels_all = data_dict['labels_all']
 
 
     # In[79]:
 
-print("Model A accuracy (unscrubbed model) ", sklearn.metrics.accuracy_score(labels_all, preds_a))
+print("Model A accuracy ({} model) ".format(scrub_arg), sklearn.metrics.accuracy_score(labels_all, preds_a))
 
 
 # In[80]:
 
 
-print("Model B accuracy (scrubbed model) ", sklearn.metrics.accuracy_score(labels_all, preds_b))
+print("Model B accuracy ({} model, control) ".format(scrub_arg), sklearn.metrics.accuracy_score(labels_all, preds_b))
 
 
 # In[82]:
@@ -251,14 +256,14 @@ for example in example_idxs2:
     print ("Single Limes")
     print('Document id: %d' % example_idx)
 
-    print('Classifier A (unscrubbed): probability =', model_a.predict_proba([bios[example_idx]])[0,labels_all[example_idx]])
+    print('Classifier A {}: probability ='.format(scrub_arg), model_a.predict_proba([bios[example_idx]])[0,labels_all[example_idx]])
     print('True class: %s' % label2occ[labels_all[example_idx]])
     print('Classifier A predicted class: %s' % label2occ[preds_a[example_idx]])
 
     fig = class_exp.as_pyplot_figure(label=labels_all[example_idx])
-    title = "Single LIME, Biased Model, Predicted {}, True {}".format(label2occ[preds_a[example_idx]], label2occ[labels_all[example_idx]])
+    title = "Single LIME, {} Model, Predicted {}, True {}".format(scrub_arg, label2occ[preds_a[example_idx]], label2occ[labels_all[example_idx]])
     plt.title(title)
-    fig.savefig('lime_final/class_exp/example_{}_a_higher_a_{}.png'.format(example_idx, label2occ[labels_all[example_idx]]))
+    fig.savefig('lime_control_{}/class_exp/example_{}_a_higher_a_{}.png'.format(scrub_arg, example_idx, label2occ[labels_all[example_idx]]))
 
 
 
@@ -271,16 +276,16 @@ for example in example_idxs2:
 
 
     print('Document id: %d' % example_idx)
-    print('Classifier B (scrubbed): ', model_b.predict_proba([bios[example_idx]])[0,labels_all[example_idx]])
+    print('Classifier B {}, control: '.format(scrub_arg), model_b.predict_proba([bios[example_idx]])[0,labels_all[example_idx]])
     print('Classifier B predicted class: %s' % label2occ[preds_b[example_idx]])
 
     print('True class: %s' % labels_all[example_idx])
 
     class_exp.as_list(label=labels_all[example_idx])
     fig = class_exp.as_pyplot_figure(label=labels_all[example_idx])
-    title = "Single LIME, Un-Biased Model, Predicted {}, True {}".format(label2occ[preds_b[example_idx]], label2occ[labels_all[example_idx]])
+    title = "Single LIME, {} Model control, Predicted {}, True {}".format(scrub_arg, label2occ[preds_b[example_idx]], label2occ[labels_all[example_idx]])
     plt.title(title)
-    fig.savefig('lime_final/class_exp/example_{}_b_higher_a_{}.png'.format(example_idx, label2occ[labels_all[example_idx]]))
+    fig.savefig('lime_control_{}/class_exp/example_{}_b_higher_a_{}.png'.format(scrub_arg,example_idx, label2occ[labels_all[example_idx]]))
     print ("--------------------")
 
 
@@ -296,16 +301,16 @@ for example in example_idxs2:
                                                       label_to_examine=labels_all[example_idx],
                                                       model_names=["Classifier A", "Classifier B"])
     print('Document id: %d' % example_idx)
-    print('Classifier A (unscrubbed):', model_a.predict_proba([bios[example_idx]])[0, labels_all[example_idx]])
-    print('Classifier B (scrubbed):', model_b.predict_proba([bios[example_idx]])[0, labels_all[example_idx]])
+    print('Classifier A {}:'.format(scrub_arg), model_a.predict_proba([bios[example_idx]])[0, labels_all[example_idx]])
+    print('Classifier B {}, control:'.format(scrub_arg), model_b.predict_proba([bios[example_idx]])[0, labels_all[example_idx]])
     print('True class: %s' % label2occ[labels_all[example_idx]])
 
     fig = reg_exp.as_pyplot_figure(label=labels_all[example_idx])
-    title = "Contrast LIME, Model A (Bias) Predicted {}, \n Model B (Unbias) Predicted {}, True {}".format(label2occ[preds_a[example_idx]],\
+    title = "Contrast LIME, {}, Model A Predicted {}, \n Model B Control Predicted {}, True {}".format(scrub_arg, label2occ[preds_a[example_idx]],\
                                                                                                            label2occ[preds_b[example_idx]], \
                                                                                                            label2occ[labels_all[example_idx]])
     plt.title(title)
-    fig.savefig('lime_final/reg_exp_contrast/example_{}_higher_a_{}.png'.format(example_idx, label2occ[labels_all[example_idx]]))
+    fig.savefig('lime_control_{}/reg_exp_contrast/example_{}_higher_a_{}.png'.format(scrub_arg, example_idx, label2occ[labels_all[example_idx]]))
     print ("--------------------")
 
 
@@ -334,14 +339,14 @@ for example in example_idxs:
     print ("Single Limes")
     print('Document id: %d' % example_idx)
 
-    print('Classifier A (unscrubbed): probability =', model_a.predict_proba([bios[example_idx]])[0,labels_all[example_idx]])
+    print('Classifier A {}: probability ='.format(scrub_arg), model_a.predict_proba([bios[example_idx]])[0,labels_all[example_idx]])
     print('True class: %s' % label2occ[labels_all[example_idx]])
     print('Classifier A predicted class: %s' % label2occ[preds_a[example_idx]])
 
     fig = class_exp.as_pyplot_figure(label=labels_all[example_idx])
-    title = "Single LIME, Biased Model, Predicted {}, True {}".format(label2occ[preds_a[example_idx]], label2occ[labels_all[example_idx]])
+    title = "Single LIME, {} Model, Predicted {}, True {}".format(scrub_arg, label2occ[preds_a[example_idx]], label2occ[labels_all[example_idx]])
     plt.title(title)
-    fig.savefig('lime_final/class_exp/example_{}_a_higher_b_{}.png'.format(example_idx, label2occ[labels_all[example_idx]]))
+    fig.savefig('lime_control_{}/class_exp/example_{}_a_higher_b_{}.png'.format(scrub_arg, example_idx, label2occ[labels_all[example_idx]]))
 
 
 
@@ -354,16 +359,16 @@ for example in example_idxs:
 
 
     print('Document id: %d' % example_idx)
-    print('Classifier B (scrubbed): ', model_b.predict_proba([bios[example_idx]])[0,labels_all[example_idx]])
+    print('Classifier B {}, control: '.format(scrub_arg), model_b.predict_proba([bios[example_idx]])[0,labels_all[example_idx]])
     print('Classifier B predicted class: %s' % label2occ[preds_b[example_idx]])
 
     print('True class: %s' % labels_all[example_idx])
 
     class_exp.as_list(label=labels_all[example_idx])
     fig = class_exp.as_pyplot_figure(label=labels_all[example_idx])
-    title = "Single LIME, Un-Biased Model, Predicted {}, True {}".format(label2occ[preds_b[example_idx]], label2occ[labels_all[example_idx]])
+    title = "Single LIME, {} Model control, Predicted {}, True {}".format(scrub_arg, label2occ[preds_b[example_idx]], label2occ[labels_all[example_idx]])
     plt.title(title)
-    fig.savefig('lime_final/class_exp/example_{}_b_higher_b_{}.png'.format(example_idx, label2occ[labels_all[example_idx]]))
+    fig.savefig('lime_control_{}/class_exp/example_{}_b_higher_b_{}.png'.format(scrub_arg,example_idx, label2occ[labels_all[example_idx]]))
     print ("--------------------")
 
 
@@ -374,20 +379,20 @@ for example in example_idxs:
     reg_exp = reg_explainer.explain_instance_contrast(bios[example_idx],
                                                       model_a.predict_proba,
                                                       model_b.predict_proba, num_samples=5000,
-                                                     labels = (labels_all[example_idx], ),
+                                                      labels = (labels_all[example_idx], ),
                                                       num_features=10,
                                                       label_to_examine=labels_all[example_idx],
                                                       model_names=["Classifier A", "Classifier B"])
     print('Document id: %d' % example_idx)
-    print('Classifier A (unscrubbed):', model_a.predict_proba([bios[example_idx]])[0, labels_all[example_idx]])
-    print('Classifier B (scrubbed):', model_b.predict_proba([bios[example_idx]])[0, labels_all[example_idx]])
+    print('Classifier A {}:'.format(scrub_arg), model_a.predict_proba([bios[example_idx]])[0, labels_all[example_idx]])
+    print('Classifier B {}, control:'.format(scrub_arg), model_b.predict_proba([bios[example_idx]])[0, labels_all[example_idx]])
     print('True class: %s' % label2occ[labels_all[example_idx]])
 
     fig = reg_exp.as_pyplot_figure(label=labels_all[example_idx])
-    title = "Contrast LIME, Model A (Bias) Predicted {}, \n Model B (Unbias) Predicted {}, True {}".format(label2occ[preds_a[example_idx]], \
-                                                                                                           label2occ[preds_b[example_idx]], \
-                                                                                                           label2occ[labels_all[example_idx]])
+    title = "Contrast LIME, {}, Model A Predicted {}, \n Model B Control Predicted {}, True {}".format(scrub_arg, label2occ[preds_a[example_idx]], \
+                                                                                                       label2occ[preds_b[example_idx]], \
+                                                                                                       label2occ[labels_all[example_idx]])
     plt.title(title)
-    fig.savefig('lime_final/reg_exp_contrast/example_{}_higher_b_{}.png'.format(example_idx, label2occ[labels_all[example_idx]]))
+    fig.savefig('lime_control_{}/reg_exp_contrast/example_{}_higher_b_{}.png'.format(scrub_arg, example_idx, label2occ[labels_all[example_idx]]))
     print ("--------------------")
 
